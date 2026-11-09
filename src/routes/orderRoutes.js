@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
 const authMiddleware = require('../middleware/authMiddleware');
 const { queryTradeInfo, verifyCheckMacValue, ECPAY_CONFIG } = require('../utils/ecpay');
+const { DELIVERY_METHODS, calculateShipping } = require('../utils/shipping');
 
 const router = express.Router();
 
@@ -38,6 +39,19 @@ function generateOrderNo() {
  *                 format: email
  *               recipientAddress:
  *                 type: string
+ *               deliveryMethod:
+ *                 type: string
+ *                 enum: [home, convenience_store]
+ *                 default: home
+ *                 description: 宅配基本費 120 元；超商取貨固定 60 元
+ *               isRemoteArea:
+ *                 type: boolean
+ *                 default: false
+ *                 description: 偏遠地區加收 200 元
+ *               isSameDay:
+ *                 type: boolean
+ *                 default: false
+ *                 description: 當日急件加收 250 元
  *     responses:
  *       201:
  *         description: 訂單建立成功
@@ -55,6 +69,18 @@ function generateOrderNo() {
  *                       type: string
  *                     total_amount:
  *                       type: integer
+ *                     subtotal_amount:
+ *                       type: integer
+ *                       description: 商品小計
+ *                     shipping_fee:
+ *                       type: integer
+ *                       description: 運費；宅配小計滿 1,500 元免基本費，附加費仍計收
+ *                     delivery_method:
+ *                       type: string
+ *                     is_remote_area:
+ *                       type: boolean
+ *                     is_same_day:
+ *                       type: boolean
  *                     status:
  *                       type: string
  *                     items:
@@ -79,7 +105,12 @@ function generateOrderNo() {
  *         description: 購物車為空或庫存不足或收件資訊缺失
  */
 router.post('/', (req, res) => {
-  const { recipientName, recipientEmail, recipientAddress } = req.body;
+  const {
+    recipientName, recipientEmail, recipientAddress,
+    deliveryMethod = DELIVERY_METHODS.HOME,
+    isRemoteArea = false,
+    isSameDay = false
+  } = req.body;
   const userId = req.user.userId;
 
   if (!recipientName || !recipientEmail || !recipientAddress) {
@@ -96,6 +127,15 @@ router.post('/', (req, res) => {
       data: null,
       error: 'VALIDATION_ERROR',
       message: 'Email 格式不正確'
+    });
+  }
+
+  if (!Object.values(DELIVERY_METHODS).includes(deliveryMethod)
+      || typeof isRemoteArea !== 'boolean' || typeof isSameDay !== 'boolean') {
+    return res.status(400).json({
+      data: null,
+      error: 'VALIDATION_ERROR',
+      message: '配送方式、偏遠地區與當日急件設定無效'
     });
   }
 
@@ -128,9 +168,11 @@ router.post('/', (req, res) => {
   }
 
   // Calculate total
-  const totalAmount = cartItems.reduce(
+  const subtotalAmount = cartItems.reduce(
     (sum, item) => sum + item.product_price * item.quantity, 0
   );
+  const shipping = calculateShipping({ subtotal: subtotalAmount, deliveryMethod, isRemoteArea, isSameDay });
+  const totalAmount = subtotalAmount + shipping.shippingFee;
 
   const orderId = uuidv4();
   const orderNo = generateOrderNo();
@@ -139,9 +181,16 @@ router.post('/', (req, res) => {
   // Transaction: create order, order items, deduct stock, clear cart
   const createOrder = db.transaction(() => {
     db.prepare(
-      `INSERT INTO orders (id, order_no, user_id, recipient_name, recipient_email, recipient_address, total_amount, merchant_trade_no)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(orderId, orderNo, userId, recipientName, recipientEmail, recipientAddress, totalAmount, merchantTradeNo);
+      `INSERT INTO orders (
+         id, order_no, user_id, recipient_name, recipient_email, recipient_address,
+         subtotal_amount, shipping_fee, delivery_method, is_remote_area, is_same_day,
+         total_amount, merchant_trade_no
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      orderId, orderNo, userId, recipientName, recipientEmail, recipientAddress,
+      subtotalAmount, shipping.shippingFee, deliveryMethod, Number(isRemoteArea), Number(isSameDay),
+      totalAmount, merchantTradeNo
+    );
 
     const insertItem = db.prepare(
       `INSERT INTO order_items (id, order_id, product_id, product_name, product_price, quantity)
@@ -170,6 +219,11 @@ router.post('/', (req, res) => {
       id: order.id,
       order_no: order.order_no,
       total_amount: order.total_amount,
+      subtotal_amount: order.subtotal_amount,
+      shipping_fee: order.shipping_fee,
+      delivery_method: order.delivery_method,
+      is_remote_area: Boolean(order.is_remote_area),
+      is_same_day: Boolean(order.is_same_day),
       status: order.status,
       items: orderItems,
       created_at: order.created_at
@@ -209,6 +263,16 @@ router.post('/', (req, res) => {
  *                             type: string
  *                           total_amount:
  *                             type: integer
+ *                           subtotal_amount:
+ *                             type: integer
+ *                           shipping_fee:
+ *                             type: integer
+ *                           delivery_method:
+ *                             type: string
+ *                           is_remote_area:
+ *                             type: boolean
+ *                           is_same_day:
+ *                             type: boolean
  *                           status:
  *                             type: string
  *                           created_at:
@@ -221,8 +285,13 @@ router.post('/', (req, res) => {
  */
 router.get('/', (req, res) => {
   const orders = db.prepare(
-    'SELECT id, order_no, total_amount, status, created_at FROM orders WHERE user_id = ? ORDER BY created_at DESC'
+    'SELECT id, order_no, subtotal_amount, shipping_fee, delivery_method, is_remote_area, is_same_day, total_amount, status, created_at FROM orders WHERE user_id = ? ORDER BY created_at DESC'
   ).all(req.user.userId);
+
+  for (const order of orders) {
+    order.is_remote_area = Boolean(order.is_remote_area);
+    order.is_same_day = Boolean(order.is_same_day);
+  }
 
   res.json({
     data: { orders },
@@ -268,6 +337,16 @@ router.get('/', (req, res) => {
  *                       type: string
  *                     total_amount:
  *                       type: integer
+ *                     subtotal_amount:
+ *                       type: integer
+ *                     shipping_fee:
+ *                       type: integer
+ *                     delivery_method:
+ *                       type: string
+ *                     is_remote_area:
+ *                       type: boolean
+ *                     is_same_day:
+ *                       type: boolean
  *                     status:
  *                       type: string
  *                     created_at:
@@ -305,7 +384,12 @@ router.get('/:id', (req, res) => {
   const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(order.id);
 
   res.json({
-    data: { ...order, items },
+    data: {
+      ...order,
+      is_remote_area: Boolean(order.is_remote_area),
+      is_same_day: Boolean(order.is_same_day),
+      items
+    },
     error: null,
     message: '成功'
   });

@@ -16,6 +16,7 @@
 | Response 欄位 | snake_case（與 DB 一致） | `order_no`, `total_amount`, `image_url` |
 | JavaScript 變數 | camelCase | `cartItems`, `totalAmount`, `orderNo` |
 | JavaScript 函式 | camelCase | `dualAuth()`, `getOwnerCondition()`, `generateOrderNo()` |
+| 業務工具模組 | `src/utils/` CommonJS | `shipping.js`, `ecpay.js` |
 | 環境變數 | UPPER_SNAKE_CASE | `JWT_SECRET`, `ADMIN_EMAIL`, `FRONTEND_URL` |
 
 > **注意**：Request Body 使用 camelCase，但 Response 使用 snake_case（直接映射資料庫欄位）。此為現有設計決策。
@@ -35,6 +36,8 @@ module.exports = router;
 module.exports = authMiddleware;
 module.exports = db;
 ```
+
+純計算業務邏輯應放在 `src/utils/` 作獨立 CommonJS 模組，讓單元測試可直接呼叫，不依賴 Express 或資料庫。訂單金額須符合 `total_amount = subtotal_amount + shipping_fee`。
 
 注意事項：
 - `vitest.config.js` 使用 ESM（`import`），因為 Vitest 要求

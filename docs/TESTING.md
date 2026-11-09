@@ -32,6 +32,7 @@ export default defineConfig({
         'tests/products.test.js',
         'tests/cart.test.js',
         'tests/orders.test.js',
+        'tests/shipping.test.js',
         'tests/adminProducts.test.js',
         'tests/adminOrders.test.js',
       ],
@@ -50,6 +51,7 @@ export default defineConfig({
 | `tests/products.test.js` | 商品列表、分頁、詳情、404 | 依賴種子商品存在 |
 | `tests/cart.test.js` | 加入購物車、查看、更新數量、刪除、訪客 vs 登入 | 依賴商品存在 + 使用者認證 |
 | `tests/orders.test.js` | 建立訂單、空購物車、認證要求、訂單列表、詳情、付款 | 依賴購物車有品項 |
+| `tests/shipping.test.js` | 宅配/超商運費、免運門檻、偏遠與急件附加費組合 | 無（直接測試純函式） |
 | `tests/adminProducts.test.js` | 後台商品列表、新增、更新、刪除、權限檢查 | 依賴 admin 帳號 |
 | `tests/adminOrders.test.js` | 後台訂單列表、詳情、狀態篩選 | 依賴訂單存在 + admin 帳號 |
 
@@ -64,9 +66,11 @@ cart.test.js          ← 第 3 順位：需要商品 + 認證 token
     ↓
 orders.test.js        ← 第 4 順位：需要購物車有品項
     ↓
-adminProducts.test.js ← 第 5 順位：需要 admin token
+shipping.test.js      ← 第 5 順位：純運費計算單元測試，無資料庫依賴
     ↓
-adminOrders.test.js   ← 第 6 順位：需要訂單存在 + admin token
+adminProducts.test.js ← 第 6 順位：需要 admin token
+    ↓
+adminOrders.test.js   ← 第 7 順位：需要訂單存在 + admin token
 ```
 
 **為何要循序執行**：測試間存在資料依賴（例如 cart 測試新增的品項會在 orders 測試中用來建立訂單）。`fileParallelism: false` 確保測試檔案依序執行，避免競態條件。

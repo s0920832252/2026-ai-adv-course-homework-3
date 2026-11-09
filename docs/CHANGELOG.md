@@ -5,6 +5,9 @@
 ## [Unreleased]
 
 ### Added
+- 新增 `src/utils/shipping.js` 配送費模組，支援宅配、超商取貨、滿額免宅配基本運費、偏遠地區與當日急件附加費
+- 訂單建立 API 儲存並回傳商品小計、運費及配送條件，總額包含運費
+- 新增 Shipping 單元測試，覆蓋基本運費、免運門檻與附加費組合
 - 綠界 ECPay AIO 金流串接：結帳後導向綠界付款頁面完成真實付款流程
 - 新增 `src/utils/ecpay.js` 工具模組：CheckMacValue 簽章產生/驗證、ECPay 專用 URL 編碼、QueryTradeInfo API 查詢
 - 新增 `GET /ecpay/payment/:orderId` 頁面路由：產生自動送出的 ECPay 付款表單
@@ -12,6 +15,7 @@
 - 訂單新增 `merchant_trade_no` 欄位：對應綠界 MerchantTradeNo，由 order_no 去除連字號產生
 
 ### Changed
+- 結帳頁新增宅配/超商取貨、偏遠地區與當日急件選項，運費與總額即時更新；購物車及商品頁的免運提示同步配送規則
 - 結帳頁面（checkout.js）：送出訂單後導向綠界付款頁面，不再直接跳轉訂單詳情
 - 訂單詳情頁面（order-detail.ejs / order-detail.js）：原「付款成功/失敗」模擬按鈕改為「查詢付款狀態」與「前往付款」按鈕；從綠界導回時自動觸發付款狀態查詢
 

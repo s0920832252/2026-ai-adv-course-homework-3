@@ -8,12 +8,36 @@ createApp({
     const submitting = ref(false);
     const cartItems = ref([]);
     const form = ref({ recipientName: '', recipientEmail: '', recipientAddress: '' });
+    const deliveryMethod = ref('home');
+    const isRemoteArea = ref(false);
+    const isSameDay = ref(false);
     const errors = ref({});
 
     const cartTotal = computed(function () {
       return cartItems.value.reduce(function (sum, item) {
         return sum + item.product.price * item.quantity;
       }, 0);
+    });
+
+    const baseShippingFee = computed(function () {
+      if (deliveryMethod.value === 'convenience_store') return 60;
+      return cartTotal.value >= 1500 ? 0 : 120;
+    });
+
+    const remoteAreaFee = computed(function () {
+      return isRemoteArea.value ? 200 : 0;
+    });
+
+    const sameDayFee = computed(function () {
+      return isSameDay.value ? 250 : 0;
+    });
+
+    const shippingFee = computed(function () {
+      return baseShippingFee.value + remoteAreaFee.value + sameDayFee.value;
+    });
+
+    const orderTotal = computed(function () {
+      return cartTotal.value + shippingFee.value;
     });
 
     function validate() {
@@ -34,7 +58,12 @@ createApp({
       try {
         const res = await apiFetch('/api/orders', {
           method: 'POST',
-          body: JSON.stringify(form.value)
+          body: JSON.stringify({
+            ...form.value,
+            deliveryMethod: deliveryMethod.value,
+            isRemoteArea: isRemoteArea.value,
+            isSameDay: isSameDay.value
+          })
         });
         Notification.show('訂單已建立，正在前往付款...', 'success');
         window.location.href = '/ecpay/payment/' + res.data.id;
@@ -60,6 +89,10 @@ createApp({
       loading.value = false;
     });
 
-    return { loading, submitting, cartItems, form, errors, cartTotal, submitOrder };
+    return {
+      loading, submitting, cartItems, form, errors, cartTotal,
+      deliveryMethod, isRemoteArea, isSameDay,
+      baseShippingFee, remoteAreaFee, sameDayFee, shippingFee, orderTotal, submitOrder
+    };
   }
 }).mount('#app');

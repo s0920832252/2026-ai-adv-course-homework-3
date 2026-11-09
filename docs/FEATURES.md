@@ -8,6 +8,7 @@
 | 商品瀏覽 | ✅ 完成 | 公開商品列表與詳情 |
 | 購物車管理 | ✅ 完成 | 雙模式認證（JWT / Session ID） |
 | 訂單管理 | ✅ 完成 | 建立、查詢、模擬付款 |
+| 配送費計算 | ✅ 完成 | 宅配/超商取貨、滿額免宅配基本運費、偏遠與急件附加費 |
 | 綠界金流串接 | ✅ 完成 | ECPay AIO 付款、QueryTradeInfo 查詢驗證 |
 | 後台商品管理 | ✅ 完成 | 商品 CRUD |
 | 後台訂單管理 | ✅ 完成 | 訂單查詢與狀態篩選 |
@@ -224,6 +225,12 @@
 
 **行為描述**：將購物車品項轉換為訂單。使用資料庫 transaction 確保「建立訂單 + 品項快照 + 扣庫存 + 清空購物車」的原子性。
 
+**配送費計算**：由 `src/utils/shipping.js` 的 `calculateShipping()` 獨立計算。結帳畫面可選宅配或超商取貨，並勾選偏遠地區、當日急件；摘要即時列出基本運費、各項附加費與總額。宅配基本運費 120 元；超商取貨固定 60 元；宅配商品小計滿 1,500 元免基本運費；偏遠地區加 200 元、當日急件加 250 元。免運僅免宅配基本運費，附加費仍會計入；超商取貨費不受宅配免運門檻影響。
+
+**Request Body 配送欄位**：`deliveryMethod`（`home` 或 `convenience_store`，預設 `home`）、`isRemoteArea`（boolean，預設 `false`）、`isSameDay`（boolean，預設 `false`）。
+
+**金額回應欄位**：`subtotal_amount` 為商品小計、`shipping_fee` 為運費、`total_amount` 為兩者合計。訂單亦保存配送方式及配送條件，供列表與詳情查詢。
+
 **Request Body**：
 
 | 欄位 | 型別 | 必填 | 驗證規則 |
@@ -231,6 +238,9 @@
 | recipientName | string | 是 | 非空 |
 | recipientEmail | string | 是 | 符合 email 正則 |
 | recipientAddress | string | 是 | 非空 |
+| deliveryMethod | string | 否 | `home` 或 `convenience_store`，預設 `home` |
+| isRemoteArea | boolean | 否 | 偏遠地區，預設 `false` |
+| isSameDay | boolean | 否 | 當日急件，預設 `false` |
 
 **業務邏輯**：
 1. 驗證收件人三個欄位皆存在
@@ -238,10 +248,11 @@
 3. 從 `cart_items JOIN products` 取得購物車品項（僅查 `user_id`，不含 session）
 4. 購物車為空 → 400 CART_EMPTY
 5. 逐品項檢查庫存，不足者收集名稱 → 400「以下商品庫存不足：名稱1, 名稱2」
-6. 計算 `totalAmount = Σ(price × quantity)`
-7. 生成 `orderNo = ORD-YYYYMMDD-{5碼UUID大寫}`
-8. **Transaction**：INSERT order → INSERT order_items（快照名稱+價格） → UPDATE stock → DELETE cart_items
-9. 回傳 201 + 訂單詳情
+6. 計算 `subtotalAmount = Σ(price × quantity)`，依配送方式與配送條件計算運費
+7. 計算 `totalAmount = subtotalAmount + shippingFee`
+8. 生成 `orderNo = ORD-YYYYMMDD-{5碼UUID大寫}`
+9. **Transaction**：INSERT order → INSERT order_items（快照名稱+價格） → UPDATE stock → DELETE cart_items
+10. 回傳 201 + 訂單詳情
 
 **錯誤情境**：
 
@@ -256,7 +267,7 @@
 
 **行為描述**：回傳當前使用者的所有訂單，依建立時間降序排列。無分頁。
 
-**回應欄位**：id, order_no, total_amount, status, created_at
+**回應欄位**：id, order_no, subtotal_amount, shipping_fee, delivery_method, is_remote_area, is_same_day, total_amount, status, created_at
 
 ### GET /api/orders/:id — 訂單詳情
 

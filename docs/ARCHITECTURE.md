@@ -21,6 +21,7 @@
 │   │   ├── sessionMiddleware.js    # 提取 X-Session-Id header → 設定 req.sessionId（訪客購物車用）
 │   │   └── errorHandler.js         # 全域錯誤處理：安全訊息對照表，500 一律回「伺服器內部錯誤」
 │   ├── utils/
+│   │   ├── shipping.js             # 配送方式、基本運費與附加費計算
 │   │   └── ecpay.js                # 綠界 ECPay 工具：CheckMacValue 簽章、URL 編碼、AIO 表單產生、QueryTradeInfo 查詢
 │   └── routes/
 │       ├── authRoutes.js           # 認證路由：註冊、登入、個人資料
@@ -329,6 +330,11 @@ server.js
 | recipient_name | TEXT | NOT NULL | 收件人姓名 |
 | recipient_email | TEXT | NOT NULL | 收件人 Email |
 | recipient_address | TEXT | NOT NULL | 收件地址 |
+| subtotal_amount | INTEGER | NOT NULL DEFAULT 0 | 商品小計 |
+| shipping_fee | INTEGER | NOT NULL DEFAULT 0 | 運費（含附加費） |
+| delivery_method | TEXT | NOT NULL DEFAULT 'home' | 配送方式：home / convenience_store |
+| is_remote_area | INTEGER | NOT NULL DEFAULT 0 | 是否偏遠地區 |
+| is_same_day | INTEGER | NOT NULL DEFAULT 0 | 是否當日急件 |
 | total_amount | INTEGER | NOT NULL | 訂單總金額 |
 | status | TEXT | NOT NULL DEFAULT 'pending', CHECK IN ('pending','paid','failed') | 訂單狀態 |
 | merchant_trade_no | TEXT | 可為 NULL | 綠界交易編號（由 order_no 去除連字號產生，如 `ORD20260412A1B2C`） |
@@ -356,10 +362,11 @@ server.js
 ├─ 2. 取得用戶購物車所有品項（JOIN products 取得即時價格與庫存）
 ├─ 3. 檢查購物車是否為空 → 400 CART_EMPTY
 ├─ 4. 檢查每個品項庫存是否充足 → 400 STOCK_INSUFFICIENT（列出所有不足商品名稱）
-├─ 5. 計算 totalAmount = Σ(price × quantity)
-├─ 6. 生成 orderNo: ORD-YYYYMMDD-{5碼UUID}
+├─ 5. 計算 subtotalAmount = Σ(price × quantity)，呼叫 Shipping 模組計算 shippingFee
+├─ 6. 計算 totalAmount = subtotalAmount + shippingFee
+├─ 7. 生成 orderNo: ORD-YYYYMMDD-{5碼UUID}
 │
-└─ 7. 🔒 Transaction 開始
+└─ 8. 🔒 Transaction 開始
      ├─ INSERT orders 記錄
      ├─ 對每個購物車品項：
      │   ├─ INSERT order_items（快照 product_name, product_price）
@@ -367,8 +374,10 @@ server.js
      └─ DELETE cart_items WHERE user_id = ?
      🔒 Transaction 結束
 │
-└─ 8. 回傳 201 + 訂單詳情
+└─ 9. 回傳 201 + 含商品小計、運費與總額的訂單詳情
 ```
+
+運費規則：宅配基本費 120 元、超商取貨 60 元；宅配小計滿 1,500 元免基本運費。偏遠地區加收 200 元、當日急件加收 250 元，兩項可同時計費，且不受宅配免運影響。
 
 ## 綠界金流付款流程
 

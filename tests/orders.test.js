@@ -38,11 +38,43 @@ describe('Orders API', () => {
     expect(res.body.data).toHaveProperty('id');
     expect(res.body.data).toHaveProperty('order_no');
     expect(res.body.data).toHaveProperty('total_amount');
+    expect(res.body.data).toHaveProperty('subtotal_amount');
+    expect(res.body.data.shipping_fee).toBe(res.body.data.subtotal_amount >= 1500 ? 0 : 120);
+    expect(res.body.data.total_amount).toBe(res.body.data.subtotal_amount + res.body.data.shipping_fee);
+    expect(res.body.data).toHaveProperty('delivery_method', 'home');
     expect(res.body.data).toHaveProperty('status', 'pending');
     expect(res.body.data).toHaveProperty('items');
     expect(Array.isArray(res.body.data.items)).toBe(true);
 
     orderId = res.body.data.id;
+  });
+
+  it('should include selected delivery and surcharges in order totals', async () => {
+    await request(app)
+      .post('/api/cart')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ productId, quantity: 1 });
+
+    const res = await request(app)
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({
+        recipientName: '測試收件人',
+        recipientEmail: 'recipient@example.com',
+        recipientAddress: '台北市測試路 123 號',
+        deliveryMethod: 'convenience_store',
+        isRemoteArea: true,
+        isSameDay: true
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data).toMatchObject({
+      delivery_method: 'convenience_store',
+      is_remote_area: true,
+      is_same_day: true,
+      shipping_fee: 510
+    });
+    expect(res.body.data.total_amount).toBe(res.body.data.subtotal_amount + 510);
   });
 
   it('should fail to create order with empty cart', async () => {

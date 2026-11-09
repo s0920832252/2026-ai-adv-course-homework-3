@@ -50,6 +50,11 @@ function initializeDatabase() {
       recipient_name TEXT NOT NULL,
       recipient_email TEXT NOT NULL,
       recipient_address TEXT NOT NULL,
+      subtotal_amount INTEGER NOT NULL DEFAULT 0,
+      shipping_fee INTEGER NOT NULL DEFAULT 0,
+      delivery_method TEXT NOT NULL DEFAULT 'home',
+      is_remote_area INTEGER NOT NULL DEFAULT 0,
+      is_same_day INTEGER NOT NULL DEFAULT 0,
       total_amount INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'paid', 'failed')),
 
@@ -74,6 +79,23 @@ function initializeDatabase() {
   } catch (e) {
     // Column already exists, ignore
   }
+
+  // Migration: persist shipping details for orders created before/after shipping support
+  for (const column of [
+    "subtotal_amount INTEGER NOT NULL DEFAULT 0",
+    "shipping_fee INTEGER NOT NULL DEFAULT 0",
+    "delivery_method TEXT NOT NULL DEFAULT 'home'",
+    'is_remote_area INTEGER NOT NULL DEFAULT 0',
+    'is_same_day INTEGER NOT NULL DEFAULT 0'
+  ]) {
+    try {
+      db.exec(`ALTER TABLE orders ADD COLUMN ${column}`);
+    } catch (e) {
+      if (!e.message.includes('duplicate column name')) throw e;
+    }
+  }
+
+  db.exec('UPDATE orders SET subtotal_amount = total_amount WHERE subtotal_amount = 0 AND shipping_fee = 0');
 
   // Seed data
   seedAdminUser();

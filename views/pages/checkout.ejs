@@ -9,7 +9,7 @@
     <!-- Left: Form -->
     <div class="lg:w-3/5">
       <div class="bg-white rounded-2xl shadow-sm p-6">
-        <h2 class="font-medium text-text-primary mb-4">收件資訊</h2>
+        <h2 class="font-medium text-text-primary mb-4">收件與配送資訊</h2>
         <div class="space-y-4">
           <div>
             <label class="block text-sm text-text-secondary mb-1">收件人姓名</label>
@@ -33,12 +33,50 @@
             />
             <p v-if="errors.recipientEmail" class="text-red-500 text-xs mt-1">{{ errors.recipientEmail }}</p>
           </div>
+          <fieldset>
+            <legend class="block text-sm text-text-secondary mb-2">配送方式</legend>
+            <div class="grid sm:grid-cols-2 gap-3">
+              <label class="flex items-start gap-3 border rounded-xl p-3 cursor-pointer transition-colors"
+                :class="deliveryMethod === 'home' ? 'border-rose-primary bg-blush' : 'border-gray-200 hover:border-rose-primary'">
+                <input v-model="deliveryMethod" type="radio" value="home" class="mt-1 accent-rose-600" />
+                <span class="flex-1">
+                  <span class="block text-sm font-medium text-text-primary">宅配</span>
+                  <span class="block text-xs text-text-secondary mt-1">未達免運門檻 NT$ 120；滿 NT$ 1,500 免基本運費</span>
+                </span>
+              </label>
+              <label class="flex items-start gap-3 border rounded-xl p-3 cursor-pointer transition-colors"
+                :class="deliveryMethod === 'convenience_store' ? 'border-rose-primary bg-blush' : 'border-gray-200 hover:border-rose-primary'">
+                <input v-model="deliveryMethod" type="radio" value="convenience_store" class="mt-1 accent-rose-600" />
+                <span class="flex-1">
+                  <span class="block text-sm font-medium text-text-primary">超商取貨</span>
+                  <span class="block text-xs text-text-secondary mt-1">運費 NT$ 60</span>
+                </span>
+              </label>
+            </div>
+          </fieldset>
+          <fieldset class="space-y-2">
+            <legend class="block text-sm text-text-secondary mb-2">配送附加服務</legend>
+            <label class="flex items-center justify-between gap-3 border border-gray-200 rounded-xl p-3 cursor-pointer hover:border-rose-primary transition-colors">
+              <span class="flex items-center gap-2 text-sm text-text-primary">
+                <input v-model="isRemoteArea" type="checkbox" class="accent-rose-600" />
+                偏遠地區配送
+              </span>
+              <span class="text-sm text-text-secondary">+ NT$ 200</span>
+            </label>
+            <label class="flex items-center justify-between gap-3 border border-gray-200 rounded-xl p-3 cursor-pointer hover:border-rose-primary transition-colors">
+              <span class="flex items-center gap-2 text-sm text-text-primary">
+                <input v-model="isSameDay" type="checkbox" class="accent-rose-600" />
+                當日急件
+              </span>
+              <span class="text-sm text-text-secondary">+ NT$ 250</span>
+            </label>
+          </fieldset>
           <div>
-            <label class="block text-sm text-text-secondary mb-1">收件地址</label>
+            <label class="block text-sm text-text-secondary mb-1">{{ deliveryMethod === 'home' ? '收件地址' : '取貨門市' }}</label>
             <input
               v-model="form.recipientAddress"
               type="text"
-              placeholder="請輸入收件地址"
+              :placeholder="deliveryMethod === 'home' ? '請輸入收件地址' : '請輸入超商名稱與門市地址'"
               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-primary transition-colors"
               :class="{ 'border-red-400': errors.recipientAddress }"
             />
@@ -64,14 +102,26 @@
             <span>NT$ {{ cartTotal.toLocaleString() }}</span>
           </div>
           <div class="flex justify-between">
-            <span class="text-text-secondary">運費</span>
-            <span>{{ cartTotal >= 500 ? '免運' : 'NT$ 150' }}</span>
+            <span class="text-text-secondary">基本運費</span>
+            <span>{{ baseShippingFee === 0 ? '免基本運費' : 'NT$ ' + baseShippingFee.toLocaleString() }}</span>
+          </div>
+          <div v-if="isRemoteArea" class="flex justify-between">
+            <span class="text-text-secondary">偏遠地區附加費</span>
+            <span>NT$ {{ remoteAreaFee.toLocaleString() }}</span>
+          </div>
+          <div v-if="isSameDay" class="flex justify-between">
+            <span class="text-text-secondary">當日急件附加費</span>
+            <span>NT$ {{ sameDayFee.toLocaleString() }}</span>
+          </div>
+          <div class="flex justify-between font-medium">
+            <span class="text-text-secondary">運費合計</span>
+            <span>NT$ {{ shippingFee.toLocaleString() }}</span>
           </div>
         </div>
         <div class="border-t border-gray-100 pt-3 mt-3 flex justify-between items-center">
           <span class="font-bold text-text-primary">總計</span>
           <span class="font-bold text-xl text-rose-primary">
-            NT$ {{ (cartTotal + (cartTotal >= 500 ? 0 : 150)).toLocaleString() }}
+            NT$ {{ orderTotal.toLocaleString() }}
           </span>
         </div>
         <button
