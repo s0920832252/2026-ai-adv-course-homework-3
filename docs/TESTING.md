@@ -13,9 +13,22 @@
 # 執行全部測試
 npm run test
 
+# 單元測試與整合測試
+npm run test:unit
+npm run test:integration
+
+# E2E：先自行啟動 localhost:3001，首次需安裝瀏覽器；腳本不會啟動伺服器
+npx playwright install chromium
+npm run test:e2e
+
+# 重新產生 OpenAPI 與 Postman Collection
+npm run postman
+
 # 等同於
 npx vitest run
 ```
+
+Vitest 測試使用作業系統暫存目錄中的 SQLite 檔案，不會讀寫專案的 `database.sqlite`；整合測試每個案例都會重建會員、商品及購物車資料，測試程序結束時清除資料庫檔案。Playwright 不設定 `webServer`，只連線至已啟動的 `http://localhost:3001`；付款成功截圖輸出至 `artifacts/e2e-payment-success.png`。
 
 ## 測試設定
 
