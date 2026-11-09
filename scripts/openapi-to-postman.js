@@ -45,10 +45,19 @@ for (const [route, methods] of Object.entries(spec.paths || {})) {
     const authIsRequired = Boolean(operation.security?.length);
     const example = { name, request, response: [] };
     if (route.endsWith('/api/auth/login') || route === '/api/auth/login') {
+      // Make the provided demo account ready to use without editing the body.
+      request.body.raw = JSON.stringify({
+        email: process.env.POSTMAN_LOGIN_EMAIL || 'admin@hexschool.com',
+        password: process.env.POSTMAN_LOGIN_PASSWORD || '12345678'
+      }, null, 2);
       request.auth = { type: 'noauth' };
       example.event = [{ listen: 'test', script: { type: 'text/javascript', exec: [
-        "const data = pm.response.json();",
-        "if (data?.data?.token) pm.collectionVariables.set('token', data.data.token);"
+        "pm.test('Login returns a JWT and saves it to token', function () {",
+        "  pm.response.to.have.status(200);",
+        "  const data = pm.response.json();",
+        "  pm.expect(data?.data?.token).to.be.a('string').and.not.empty;",
+        "  pm.collectionVariables.set('token', data.data.token);",
+        "});"
       ] } }];
     } else if (authIsRequired) {
       request.auth = { type: 'bearer', bearer: [{ key: 'token', value: '{{token}}', type: 'string' }] };
@@ -59,8 +68,11 @@ for (const [route, methods] of Object.entries(spec.paths || {})) {
   }
 }
 
+// Collection Runner must authenticate before it reaches protected endpoints.
+items.sort((a, b) => Number(b.name === '登入') - Number(a.name === '登入'));
+
 const collection = {
-  info: { name: `${spec.info?.title || 'API'} Collection`, description: '由專案 OpenAPI 文件產生。執行登入請求後會自動保存 JWT。', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
+  info: { name: `${spec.info?.title || 'API'} Collection`, description: '登入請求已預填作業測試帳號，並置於第一項；成功後會自動保存 JWT，供後續受保護 API 使用。', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
   auth: { type: 'bearer', bearer: [{ key: 'token', value: '{{token}}', type: 'string' }] },
   variable: [
     { key: 'baseUrl', value: 'http://localhost:3001', type: 'string' },
